@@ -42,7 +42,13 @@ const QUESTIONS = [
   { id: 'q11', short: 'Wsparcie dietetyczne w TMN', type: 'single',
     text: 'Czy interesuje Cię dodatkowe wsparcie dietetyczne w TMN?',
     options: ['Tak', 'Może', 'Nie'] },
+  { id: 'kontakt', type: 'contact',
+    text: 'Na koniec: Twoje dane kontaktowe' },
 ];
+
+const CONSENT_SURVEY = 'Wyrażam zgodę na przetwarzanie moich danych osobowych (imię i nazwisko, telefon, e-mail, odpowiedzi z ankiety) przez TRAINMENOW Sp. z o.o. w celu przeprowadzenia i opracowania ankiety.';
+const CONSENT_LEAD = 'Chcę, żeby Train Me Now skontaktował się ze mną telefonicznie lub e-mailem w sprawie konsultacji dietetycznej.';
+const PRIVACY_NOTE = 'Administratorem Twoich danych jest TRAINMENOW Sp. z o.o., ul. Kalinowa 75C/1, 80-177 Gdańsk. Podanie danych jest dobrowolne. Zgody możesz w każdej chwili wycofać, pisząc na kontakt@trainmenow.pl. Masz prawo dostępu do swoich danych, ich poprawienia i usunięcia. Więcej: trainmenow.pl/polityka-prywatnosci';
 
 const QUEUE_KEY = 'tmn-ankieta-kolejka';
 const RESET_SECONDS = 8;
@@ -72,13 +78,51 @@ function renderIntro() {
     <div class="intro">
       <p class="eyebrow"><span class="rule"></span>Ankieta Train Me Now</p>
       <h1>Jak się <span class="bar">odżywiasz?</span></h1>
-      <p class="lead">Kilka krótkich pytań o Twoje nawyki. Zajmie Ci to około 2 minut.<br>Ankieta jest anonimowa.</p>
+      <p class="lead">Kilka krótkich pytań o Twoje nawyki. Zajmie Ci to około 2 minut.</p>
       <button class="cta" id="start">Zaczynamy</button>
     </div>`;
   $('#start').onclick = () => { answers = {}; step = 0; render(); };
 }
 
+function renderContact(q, n, total) {
+  const v = answers.kontakt || { name: '', phone: '', email: '', survey: false, lead: false };
+  const esc = s => String(s).replace(/"/g, '&quot;');
+  screen.innerHTML = `
+    <div class="q">
+      <p class="eyebrow"><span class="rule"></span>Ostatni krok</p>
+      <h2>${q.text}</h2>
+      <div class="fields">
+        <label class="field"><span>Imię i nazwisko *</span><input id="f-name" type="text" autocomplete="name" autocapitalize="words" maxlength="80" value="${esc(v.name)}"></label>
+        <label class="field"><span>Telefon *</span><input id="f-phone" type="tel" inputmode="tel" autocomplete="tel" maxlength="20" placeholder="np. 600 100 200" value="${esc(v.phone)}"></label>
+        <label class="field"><span>E-mail (opcjonalnie)</span><input id="f-email" type="email" inputmode="email" autocomplete="email" autocapitalize="off" maxlength="100" value="${esc(v.email)}"></label>
+      </div>
+      <button class="opt check consent ${v.lead ? 'sel' : ''}" id="c-lead"><span class="box"></span><span>${CONSENT_LEAD}</span></button>
+      <button class="opt check consent ${v.survey ? 'sel' : ''}" id="c-survey"><span class="box"></span><span>${CONSENT_SURVEY} *</span></button>
+      <p class="legal">${PRIVACY_NOTE}</p>
+      <p class="err" id="err" hidden></p>
+      <button class="cta next" id="next">Wyślij ankietę</button>
+    </div>`;
+  const get = () => ({
+    name: $('#f-name').value.trim(), phone: $('#f-phone').value.trim(), email: $('#f-email').value.trim(),
+    survey: $('#c-survey').classList.contains('sel'), lead: $('#c-lead').classList.contains('sel') });
+  const save = () => { answers.kontakt = get(); };
+  screen.querySelectorAll('input').forEach(i => i.oninput = save);
+  ['#c-lead', '#c-survey'].forEach(id => $(id).onclick = () => { $(id).classList.toggle('sel'); save(); });
+  $('#next').onclick = () => {
+    const d = get(), err = $('#err');
+    const digits = d.phone.replace(/\D/g, '');
+    let msg = '';
+    if (d.name.length < 2) msg = 'Wpisz imię i nazwisko.';
+    else if (digits.length < 9 || digits.length > 12) msg = 'Wpisz poprawny numer telefonu.';
+    else if (d.email && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(d.email)) msg = 'Sprawdź adres e-mail albo zostaw to pole puste.';
+    else if (!d.survey) msg = 'Zaznacz zgodę na przetwarzanie danych w celu przeprowadzenia ankiety.';
+    if (msg) { err.textContent = msg; err.hidden = false; return; }
+    answers.kontakt = d; step++; render();
+  };
+}
+
 function renderQuestion(q, n, total) {
+  if (q.type === 'contact') return renderContact(q, n, total);
   const val = answers[q.id];
   let body = '';
   if (q.type === 'single') {
@@ -97,7 +141,7 @@ function renderQuestion(q, n, total) {
   }
   screen.innerHTML = `
     <div class="q">
-      <p class="eyebrow"><span class="rule"></span>Pytanie ${n} z ${total}</p>
+      <p class="eyebrow"><span class="rule"></span>Pytanie ${n} z ${total - 1}</p>
       <h2>${q.text}</h2>
       ${q.hint ? `<p class="hint">${q.hint}</p>` : ''}
       ${body}
@@ -141,7 +185,7 @@ function renderThanks() {
     <div class="intro thanks">
       <p class="eyebrow"><span class="rule"></span>Gotowe</p>
       <h1>Dziękujemy <span class="bar">za odpowiedzi!</span></h1>
-      <p class="lead">Ankieta zapisana. Możesz oddać tablet.</p>
+      <p class="lead">${answers.kontakt && answers.kontakt.lead ? 'Odezwiemy się do Ciebie w sprawie konsultacji dietetycznej. ' : ''}Możesz oddać tablet.</p>
       <button class="cta" id="again">Następna osoba (<span id="count">${left}</span>)</button>
     </div>`;
   $('#again').onclick = reset;
@@ -153,7 +197,13 @@ function reset() { clearInterval(resetTimer); answers = {}; step = -1; render();
 function toRow(a) {
   const fmt = v => v == null ? '' : typeof v === 'object' ? [...v.items, v.other ? 'Inne: ' + v.other.trim() : ''].filter(Boolean).join('; ') : v;
   const row = { 'Data': new Date().toLocaleString('pl-PL') };
-  QUESTIONS.forEach((q, i) => { row[q.short] = fmt(a[q.id]); });
+  QUESTIONS.forEach(q => { if (q.short) row[q.short] = fmt(a[q.id]); });
+  const k = a.kontakt || {};
+  row['Imię i nazwisko'] = k.name || '';
+  row['Telefon'] = k.phone || '';
+  row['E-mail'] = k.email || '';
+  row['Zgoda na ankietę'] = k.survey ? 'Tak' : 'Nie';
+  row['Kontakt w sprawie konsultacji'] = k.lead ? 'Tak' : 'Nie';
   return row;
 }
 

@@ -1,4 +1,5 @@
 // Ankieta TMN: zapis odpowiedzi do tego arkusza.
+// Wiersze z zaznaczoną zgodą na kontakt w sprawie konsultacji dietetycznej są podświetlone (leady).
 // Wklej ten kod w Arkusz → Rozszerzenia → Apps Script, potem Wdróż → Nowe wdrożenie → Aplikacja internetowa
 // (Wykonuj jako: Ja, Kto ma dostęp: Każdy).
 
@@ -17,6 +18,11 @@ const HEADERS = [
   'Chęć większej wiedzy',
   'Najbardziej pomocne (2)',
   'Wsparcie dietetyczne w TMN',
+  'Imię i nazwisko',
+  'Telefon',
+  'E-mail',
+  'Zgoda na ankietę',
+  'Kontakt w sprawie konsultacji',
 ];
 
 function getSheet_() {
@@ -36,7 +42,14 @@ function doPost(e) {
   lock.waitLock(10000);
   try {
     const data = JSON.parse(e.postData.contents);
-    getSheet_().appendRow(HEADERS.map(h => data[h] === undefined ? '' : data[h]));
+    const sh = getSheet_();
+    // telefon jako tekst, żeby Arkusz nie zjadł zer ani spacji
+    const row = HEADERS.map(h => data[h] === undefined ? '' : (h === 'Telefon' ? "'" + data[h] : data[h]));
+    sh.appendRow(row);
+    // lead na konsultację: wiersz podświetlony na żółto
+    if (data['Kontakt w sprawie konsultacji'] === 'Tak') {
+      sh.getRange(sh.getLastRow(), 1, 1, HEADERS.length).setBackground('#FFF6BF');
+    }
     return ContentService.createTextOutput('ok');
   } finally {
     lock.releaseLock();
